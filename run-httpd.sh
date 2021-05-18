@@ -23,35 +23,36 @@ elif [[ -z ${DST_SERVICE_PORT} ]]; then
 	exit 1
 fi
 
+if [[ ${REMOTE_SECURE} -qe "yes" ]]; then
+	DST_PROTOCAL="https"
+else
+	DST_PROTOCAL="http"
 
 echo "
 <VirtualHost *:8080>
+        RewriteEngine On
         OIDCProviderMetadataURL https://${RH_SSO_FQDN}/auth/realms/${RH_SSO_REALM}/.well-known/openid-configuration
         OIDCClientID $CLIENT_ID
         OIDCClientSecret $CLIENT_SECRET
         OIDCRedirectURI https://${REVERSE_SSO_ROUTE}/oauth2callback
-		OIDCCryptoPassphrase openshift
+	OIDCCryptoPassphrase openshift
 
-		<Directory "/opt/app-root/">
-	   		AllowOverride All
-		</Directory>
+	<Directory "/opt/app-root/">
+   		AllowOverride All
+	</Directory>
 
         <Location />
-	        AuthType openid-connect
+            AuthType openid-connect
     	    Require valid-user
-			ProxyPreserveHost on
-			ProxyPass	http://${DST_SERVICE_NAME}:${DST_SERVICE_PORT}/
-			ProxyPassReverse	http://${DST_SERVICE_NAME}:${DST_SERVICE_PORT}/
+            ProxyPreserveHost on
+            ProxyPass	${DST_PROTOCAL}://${DST_SERVICE_NAME}:${DST_SERVICE_PORT}/
+	    ProxyPassReverse	${DST_PROTOCAL}://${DST_SERVICE_NAME}:${DST_SERVICE_PORT}/
+            RewriteCond %{LA-U:REMOTE_USER} (.+)
+            RewriteRule . - [E=RU:%1]
+            RequestHeader set X-Remote-User "%{RU}e" env=RU
         </Location>
 </VirtualHost>
 " > /tmp/reverse.conf
-
-#sed -i "s/RH_SSO_URL/${RH_SSO_URL}/g" /tmp/reverse.conf
-#sed -i "s/CLIENT_ID/${CLIENT_ID}/g" /tmp/reverse.conf
-#sed -i "s/CLIENT_SECRET/${CLIENT_SECRET}/g" /tmp/reverse.conf
-#sed -i "s/REVERSE_SSO_ROUTE/${REVERSE_SSO_ROUTE}/g" /tmp/reverse.conf
-
 mv /tmp/reverse.conf /opt/app-root/reverse.conf
-
 
 /usr/sbin/httpd $OPTIONS -DFOREGROUND
